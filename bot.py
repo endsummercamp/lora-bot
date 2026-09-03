@@ -4,6 +4,7 @@ specifico, tramite un dispositivo Meshtastic collegato via USB."""
 import asyncio
 import logging
 import os
+import re
 import sys
 
 import meshtastic
@@ -115,6 +116,30 @@ def _sanitize_for_code_span(value: str) -> str:
     return value.replace("`", "'")
 
 
+_MESHTASTIC_BOLD_RE = re.compile(r"\*\*(.+?)\*\*", re.DOTALL)
+_MESHTASTIC_ITALIC_RE = re.compile(r"\*(.+?)\*", re.DOTALL)
+_BOLD_PLACEHOLDER_RE = re.compile(r"\x00(\d+)\x00")
+
+
+def meshtastic_markdown_to_telegram(text: str) -> str:
+    """Meshtastic usa `*corsivo*` e `**grassetto**`; Telegram (Markdown V1)
+    usa `_corsivo_` e `*grassetto*`. Converte la sintassi prima del relay.
+
+    Il grassetto va estratto per primo e messo temporaneamente da parte
+    (placeholder), altrimenti gli asterischi singoli che produce (`*...*`)
+    verrebbero ripresi dalla conversione del corsivo."""
+    bold_contents = []
+
+    def stash_bold(m: re.Match) -> str:
+        bold_contents.append(m.group(1))
+        return f"\x00{len(bold_contents) - 1}\x00"
+
+    text = _MESHTASTIC_BOLD_RE.sub(stash_bold, text)
+    text = _MESHTASTIC_ITALIC_RE.sub(lambda m: f"_{m.group(1)}_", text)
+    text = _BOLD_PLACEHOLDER_RE.sub(lambda m: f"*{bold_contents[int(m.group(1))]}*", text)
+    return text
+
+
 def format_message(packet: dict, interface: "meshtastic.serial_interface.SerialInterface") -> str:
     from_id = packet.get("fromId", "sconosciuto")
     node_info = interface.nodes.get(from_id, {}) if hasattr(interface, "nodes") else {}
@@ -123,7 +148,7 @@ def format_message(packet: dict, interface: "meshtastic.serial_interface.SerialI
     short_name = user.get("shortName")
     name = f"{full_name} ({_sanitize_for_code_span(short_name)})" if short_name else full_name
     header = f"`<{name}>`"
-    text = packet.get("decoded", {}).get("text", "")
+    text = meshtastic_markdown_to_telegram(packet.get("decoded", {}).get("text", ""))
     return f"{header} {text}"
 
 

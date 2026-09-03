@@ -20,6 +20,10 @@ collegato via USB e li inoltra su un gruppo Telegram.
   viene resa anche su Telegram; se il Markdown risulta malformato il bot
   ripiega automaticamente sul testo semplice), anteprime dei link
   disattivate.
+- Meshtastic e Telegram usano convenzioni diverse per grassetto/corsivo
+  (Meshtastic: `*corsivo*` e `**grassetto**` — Telegram Markdown:
+  `_corsivo_` e `*grassetto*`): il bot traduce la sintassi prima di
+  inoltrare il messaggio.
 
 ## Setup
 
