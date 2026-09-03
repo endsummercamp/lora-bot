@@ -24,6 +24,12 @@ logging.basicConfig(
 )
 log = logging.getLogger("lora-bot")
 
+# httpx logga a livello INFO ogni richiesta HTTP includendo l'URL completo,
+# che per la Bot API di Telegram contiene il token in chiaro
+# (https://api.telegram.org/bot<TOKEN>/sendMessage). Silenziato per non
+# farlo comparire nei log.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 MESHTASTIC_CHANNEL_NAME = os.environ.get("MESHTASTIC_CHANNEL_NAME")
