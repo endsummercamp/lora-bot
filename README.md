@@ -14,16 +14,14 @@ collegato via USB e li inoltra su un gruppo Telegram.
 - Si mette in ascolto dell'evento `meshtastic.receive.text` e, per ogni
   messaggio ricevuto su quel canale, lo inoltra al gruppo Telegram
   (`TELEGRAM_CHAT_ID`) tramite il bot Telegram (`TELEGRAM_BOT_TOKEN`), nel
-  formato `` `<Nome Completo (ShortName)>` messaggio `` — nome del nodo in
-  monospace, testo del messaggio inviato come Markdown (così eventuale
-  formattazione Markdown scritta da chi manda il messaggio via Meshtastic
-  viene resa anche su Telegram; se il Markdown risulta malformato il bot
-  ripiega automaticamente sul testo semplice), anteprime dei link
-  disattivate.
-- Meshtastic e Telegram usano convenzioni diverse per grassetto/corsivo
-  (Meshtastic: `*corsivo*` e `**grassetto**` — Telegram Markdown:
-  `_corsivo_` e `*grassetto*`): il bot traduce la sintassi prima di
-  inoltrare il messaggio.
+  formato `<Nome Completo (ShortName)>` messaggio — nome del nodo in
+  monospace, anteprime dei link disattivate.
+- La formattazione Meshtastic (`*corsivo*`, `**grassetto**`,
+  `~~barrato~~`) viene tradotta nei tag HTML equivalenti (`<i>`, `<b>`,
+  `<s>`) e il messaggio è inviato con `parse_mode` HTML — Telegram
+  Markdown "legacy" non supporta il barrato, e MarkdownV2 richiederebbe di
+  scappare a mano una ventina di caratteri speciali nel testo libero
+  scritto da terzi via Meshtastic.
 
 ## Setup
 

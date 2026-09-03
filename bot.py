@@ -2,6 +2,7 @@
 specifico, tramite un dispositivo Meshtastic collegato via USB."""
 
 import asyncio
+import html
 import logging
 import os
 import re
@@ -15,7 +16,6 @@ from meshtastic.protobuf import channel_pb2
 from pubsub import pub
 from telegram import Bot, LinkPreviewOptions
 from telegram.constants import ParseMode
-from telegram.error import BadRequest
 
 load_dotenv()
 
@@ -109,46 +109,48 @@ def resolve_channel_index(interface: "meshtastic.serial_interface.SerialInterfac
     return 0
 
 
-def _sanitize_for_code_span(value: str) -> str:
-    """Un backtick letterale chiuderebbe prematuramente lo span di codice
-    Markdown: i nomi dei nodi sono impostati liberamente dagli utenti
-    Meshtastic, quindi vanno bonificati prima di finire nell'header."""
-    return value.replace("`", "'")
+# Meshtastic usa **grassetto**, *corsivo* e ~~barrato~~. Il grassetto va
+# provato prima del corsivo nell'alternanza, altrimenti i suoi due
+# asterischi verrebbero letti come due enfasi singole adiacenti: `re`
+# prova le alternative nell'ordine scritto per ogni posizione, quindi con
+# "**" a inizio testo la prima alternativa (grassetto) vince.
+_MESHTASTIC_FORMAT_RE = re.compile(
+    r"\*\*(?P<bold>.+?)\*\*"
+    r"|~~(?P<strike>.+?)~~"
+    r"|\*(?P<italic>.+?)\*",
+    re.DOTALL,
+)
+
+_HTML_TAG_BY_GROUP = {"bold": "b", "strike": "s", "italic": "i"}
 
 
-_MESHTASTIC_BOLD_RE = re.compile(r"\*\*(.+?)\*\*", re.DOTALL)
-_MESHTASTIC_ITALIC_RE = re.compile(r"\*(.+?)\*", re.DOTALL)
-_BOLD_PLACEHOLDER_RE = re.compile(r"\x00(\d+)\x00")
-
-
-def meshtastic_markdown_to_telegram(text: str) -> str:
-    """Meshtastic usa `*corsivo*` e `**grassetto**`; Telegram (Markdown V1)
-    usa `_corsivo_` e `*grassetto*`. Converte la sintassi prima del relay.
-
-    Il grassetto va estratto per primo e messo temporaneamente da parte
-    (placeholder), altrimenti gli asterischi singoli che produce (`*...*`)
-    verrebbero ripresi dalla conversione del corsivo."""
-    bold_contents = []
-
-    def stash_bold(m: re.Match) -> str:
-        bold_contents.append(m.group(1))
-        return f"\x00{len(bold_contents) - 1}\x00"
-
-    text = _MESHTASTIC_BOLD_RE.sub(stash_bold, text)
-    text = _MESHTASTIC_ITALIC_RE.sub(lambda m: f"_{m.group(1)}_", text)
-    text = _BOLD_PLACEHOLDER_RE.sub(lambda m: f"*{bold_contents[int(m.group(1))]}*", text)
-    return text
+def meshtastic_markdown_to_html(text: str) -> str:
+    """Converte *corsivo*, **grassetto** e ~~barrato~~ di Meshtastic nei
+    tag HTML equivalenti (<i>, <b>, <s>) supportati da Telegram, scappando
+    il resto del testo. Essendo generato programmaticamente, il risultato
+    ha sempre i tag bilanciati: a differenza del Markdown di Telegram, non
+    può fallire il parsing per markdown non chiuso scritto dal mittente."""
+    parts = []
+    last_end = 0
+    for m in _MESHTASTIC_FORMAT_RE.finditer(text):
+        parts.append(html.escape(text[last_end : m.start()]))
+        group_name = m.lastgroup
+        tag = _HTML_TAG_BY_GROUP[group_name]
+        parts.append(f"<{tag}>{html.escape(m.group(group_name))}</{tag}>")
+        last_end = m.end()
+    parts.append(html.escape(text[last_end:]))
+    return "".join(parts)
 
 
 def format_message(packet: dict, interface: "meshtastic.serial_interface.SerialInterface") -> str:
     from_id = packet.get("fromId", "sconosciuto")
     node_info = interface.nodes.get(from_id, {}) if hasattr(interface, "nodes") else {}
     user = node_info.get("user", {})
-    full_name = _sanitize_for_code_span(user.get("longName") or from_id)
+    full_name = html.escape(user.get("longName") or from_id)
     short_name = user.get("shortName")
-    name = f"{full_name} ({_sanitize_for_code_span(short_name)})" if short_name else full_name
-    header = f"`<{name}>`"
-    text = meshtastic_markdown_to_telegram(packet.get("decoded", {}).get("text", ""))
+    name = f"{full_name} ({html.escape(short_name)})" if short_name else full_name
+    header = f"<code>&lt;{name}&gt;</code>"
+    text = meshtastic_markdown_to_html(packet.get("decoded", {}).get("text", ""))
     return f"{header} {text}"
 
 
@@ -185,34 +187,16 @@ class Bridge:
         log.warning("Connessione al dispositivo Meshtastic persa.")
 
 
-async def send_to_telegram(bot: Bot, message: str):
-    link_preview_options = LinkPreviewOptions(is_disabled=True)
-    try:
-        await bot.send_message(
-            chat_id=TELEGRAM_CHAT_ID,
-            text=message,
-            parse_mode=ParseMode.MARKDOWN,
-            link_preview_options=link_preview_options,
-        )
-    except BadRequest as e:
-        if "can't parse entities" not in str(e).lower():
-            raise
-        # Markdown non bilanciato nel testo Meshtastic (contenuto libero,
-        # scritto da terzi): invio come testo semplice piuttosto che perdere
-        # il messaggio.
-        log.warning("Markdown non valido nel messaggio, invio come testo semplice: %s", e)
-        await bot.send_message(
-            chat_id=TELEGRAM_CHAT_ID,
-            text=message,
-            link_preview_options=link_preview_options,
-        )
-
-
 async def telegram_sender(bot: Bot, queue: "asyncio.Queue[str]"):
     while True:
         message = await queue.get()
         try:
-            await send_to_telegram(bot, message)
+            await bot.send_message(
+                chat_id=TELEGRAM_CHAT_ID,
+                text=message,
+                parse_mode=ParseMode.HTML,
+                link_preview_options=LinkPreviewOptions(is_disabled=True),
+            )
         except Exception:
             log.exception("Errore nell'invio del messaggio a Telegram")
 
