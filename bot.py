@@ -109,34 +109,48 @@ def resolve_channel_index(interface: "meshtastic.serial_interface.SerialInterfac
     return 0
 
 
-# Meshtastic usa **grassetto**, *corsivo* e ~~barrato~~. Il grassetto va
-# provato prima del corsivo nell'alternanza, altrimenti i suoi due
-# asterischi verrebbero letti come due enfasi singole adiacenti: `re`
+# Meshtastic usa **grassetto**, *corsivo*, ~~barrato~~ e [testo](link). Il
+# grassetto va provato prima del corsivo nell'alternanza, altrimenti i suoi
+# due asterischi verrebbero letti come due enfasi singole adiacenti: `re`
 # prova le alternative nell'ordine scritto per ogni posizione, quindi con
 # "**" a inizio testo la prima alternativa (grassetto) vince.
 _MESHTASTIC_FORMAT_RE = re.compile(
     r"\*\*(?P<bold>.+?)\*\*"
     r"|~~(?P<strike>.+?)~~"
-    r"|\*(?P<italic>.+?)\*",
+    r"|\*(?P<italic>.+?)\*"
+    r"|\[(?P<link_text>.+?)\]\((?P<link_url>[^()\s]+)\)",
     re.DOTALL,
 )
 
 _HTML_TAG_BY_GROUP = {"bold": "b", "strike": "s", "italic": "i"}
+# Solo schemi che un client Telegram apre senza eseguire codice: un link
+# scritto da un mittente sconosciuto sull'altro capo del bridge potrebbe
+# altrimenti usare javascript: o simili.
+_SAFE_LINK_URL_RE = re.compile(r"^(https?|tg)://", re.IGNORECASE)
 
 
 def meshtastic_markdown_to_html(text: str) -> str:
-    """Converte *corsivo*, **grassetto** e ~~barrato~~ di Meshtastic nei
-    tag HTML equivalenti (<i>, <b>, <s>) supportati da Telegram, scappando
-    il resto del testo. Essendo generato programmaticamente, il risultato
-    ha sempre i tag bilanciati: a differenza del Markdown di Telegram, non
-    può fallire il parsing per markdown non chiuso scritto dal mittente."""
+    """Converte *corsivo*, **grassetto**, ~~barrato~~ e [testo](link) di
+    Meshtastic nei tag HTML equivalenti (<i>, <b>, <s>, <a href>)
+    supportati da Telegram, scappando il resto del testo. Essendo generato
+    programmaticamente, il risultato ha sempre i tag bilanciati: a
+    differenza del Markdown di Telegram, non può fallire il parsing per
+    markdown non chiuso scritto dal mittente."""
     parts = []
     last_end = 0
     for m in _MESHTASTIC_FORMAT_RE.finditer(text):
         parts.append(html.escape(text[last_end : m.start()]))
-        group_name = m.lastgroup
-        tag = _HTML_TAG_BY_GROUP[group_name]
-        parts.append(f"<{tag}>{html.escape(m.group(group_name))}</{tag}>")
+        url = m.group("link_url")
+        if url is not None:
+            link_text = html.escape(m.group("link_text"))
+            if _SAFE_LINK_URL_RE.match(url):
+                parts.append(f'<a href="{html.escape(url)}">{link_text}</a>')
+            else:
+                parts.append(html.escape(m.group(0)))
+        else:
+            group_name = m.lastgroup
+            tag = _HTML_TAG_BY_GROUP[group_name]
+            parts.append(f"<{tag}>{html.escape(m.group(group_name))}</{tag}>")
         last_end = m.end()
     parts.append(html.escape(text[last_end:]))
     return "".join(parts)

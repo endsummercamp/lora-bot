@@ -17,10 +17,11 @@ collegato via USB e li inoltra su un gruppo Telegram.
   formato `<Nome Completo (ShortName)>` messaggio — nome del nodo in
   monospace, anteprime dei link disattivate.
 - La formattazione Meshtastic (`*corsivo*`, `**grassetto**`,
-  `~~barrato~~`) viene tradotta nei tag HTML equivalenti (`<i>`, `<b>`,
-  `<s>`) e il messaggio è inviato con `parse_mode` HTML — Telegram
-  Markdown "legacy" non supporta il barrato, e MarkdownV2 richiederebbe di
-  scappare a mano una ventina di caratteri speciali nel testo libero
+  `~~barrato~~`, `[testo](link)`) viene tradotta nei tag HTML equivalenti
+  (`<i>`, `<b>`, `<s>`, `<a href>`) e il messaggio è inviato con
+  `parse_mode` HTML — Telegram Markdown "legacy" non supporta il barrato,
+  e MarkdownV2 richiederebbe di scappare a mano una ventina di caratteri
+  speciali nel testo libero
   scritto da terzi via Meshtastic.
 
 ## Setup
