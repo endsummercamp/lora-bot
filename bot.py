@@ -12,7 +12,9 @@ import meshtastic.util
 from dotenv import load_dotenv
 from meshtastic.protobuf import channel_pb2
 from pubsub import pub
-from telegram import Bot
+from telegram import Bot, LinkPreviewOptions
+from telegram.constants import ParseMode
+from telegram.error import BadRequest
 
 load_dotenv()
 
@@ -100,13 +102,21 @@ def resolve_channel_index(interface: "meshtastic.serial_interface.SerialInterfac
     return 0
 
 
+def _sanitize_for_code_span(value: str) -> str:
+    """Un backtick letterale chiuderebbe prematuramente lo span di codice
+    Markdown: i nomi dei nodi sono impostati liberamente dagli utenti
+    Meshtastic, quindi vanno bonificati prima di finire nell'header."""
+    return value.replace("`", "'")
+
+
 def format_message(packet: dict, interface: "meshtastic.serial_interface.SerialInterface") -> str:
     from_id = packet.get("fromId", "sconosciuto")
     node_info = interface.nodes.get(from_id, {}) if hasattr(interface, "nodes") else {}
     user = node_info.get("user", {})
-    full_name = user.get("longName") or from_id
+    full_name = _sanitize_for_code_span(user.get("longName") or from_id)
     short_name = user.get("shortName")
-    header = f"<{full_name} ({short_name})>" if short_name else f"<{full_name}>"
+    name = f"{full_name} ({_sanitize_for_code_span(short_name)})" if short_name else full_name
+    header = f"`<{name}>`"
     text = packet.get("decoded", {}).get("text", "")
     return f"{header} {text}"
 
@@ -144,14 +154,34 @@ class Bridge:
         log.warning("Connessione al dispositivo Meshtastic persa.")
 
 
+async def send_to_telegram(bot: Bot, message: str):
+    link_preview_options = LinkPreviewOptions(is_disabled=True)
+    try:
+        await bot.send_message(
+            chat_id=TELEGRAM_CHAT_ID,
+            text=message,
+            parse_mode=ParseMode.MARKDOWN,
+            link_preview_options=link_preview_options,
+        )
+    except BadRequest as e:
+        if "can't parse entities" not in str(e).lower():
+            raise
+        # Markdown non bilanciato nel testo Meshtastic (contenuto libero,
+        # scritto da terzi): invio come testo semplice piuttosto che perdere
+        # il messaggio.
+        log.warning("Markdown non valido nel messaggio, invio come testo semplice: %s", e)
+        await bot.send_message(
+            chat_id=TELEGRAM_CHAT_ID,
+            text=message,
+            link_preview_options=link_preview_options,
+        )
+
+
 async def telegram_sender(bot: Bot, queue: "asyncio.Queue[str]"):
     while True:
         message = await queue.get()
         try:
-            await bot.send_message(
-                chat_id=TELEGRAM_CHAT_ID,
-                text=message,
-            )
+            await send_to_telegram(bot, message)
         except Exception:
             log.exception("Errore nell'invio del messaggio a Telegram")
 

@@ -13,7 +13,13 @@ collegato via USB e li inoltra su un gruppo Telegram.
   (provisioning) sul primo slot libero con quel nome e quella chiave.
 - Si mette in ascolto dell'evento `meshtastic.receive.text` e, per ogni
   messaggio ricevuto su quel canale, lo inoltra al gruppo Telegram
-  (`TELEGRAM_CHAT_ID`) tramite il bot Telegram (`TELEGRAM_BOT_TOKEN`).
+  (`TELEGRAM_CHAT_ID`) tramite il bot Telegram (`TELEGRAM_BOT_TOKEN`), nel
+  formato `` `<Nome Completo (ShortName)>` messaggio `` — nome del nodo in
+  monospace, testo del messaggio inviato come Markdown (così eventuale
+  formattazione Markdown scritta da chi manda il messaggio via Meshtastic
+  viene resa anche su Telegram; se il Markdown risulta malformato il bot
+  ripiega automaticamente sul testo semplice), anteprime dei link
+  disattivate.
 
 ## Setup
 
