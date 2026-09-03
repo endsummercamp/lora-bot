@@ -8,7 +8,9 @@ collegato via USB e li inoltra su un gruppo Telegram.
 - `bot.py` apre una connessione seriale al dispositivo Meshtastic
   (`meshtastic.serial_interface.SerialInterface`, autorilevamento porta).
 - All'avvio legge l'elenco dei canali del nodo e trova l'indice
-  corrispondente al nome impostato in `MESHTASTIC_CHANNEL_NAME`.
+  corrispondente al nome impostato in `MESHTASTIC_CHANNEL_NAME`. Se il
+  canale non esiste e `MESHTASTIC_CHANNEL_PSK` è configurata, lo crea
+  (provisioning) sul primo slot libero con quel nome e quella chiave.
 - Si mette in ascolto dell'evento `meshtastic.receive.text` e, per ogni
   messaggio ricevuto su quel canale, lo inoltra al gruppo Telegram
   (`TELEGRAM_CHAT_ID`) tramite il bot Telegram (`TELEGRAM_BOT_TOKEN`).
@@ -22,16 +24,23 @@ collegato via USB e li inoltra su un gruppo Telegram.
    gruppo a [@userinfobot](https://t.me/userinfobot), oppure chiamando
    `https://api.telegram.org/bot<TOKEN>/getUpdates` dopo aver scritto un
    messaggio nel gruppo).
-3. Verifica il nome del canale Meshtastic che vuoi inoltrare (dall'app
-   Meshtastic, sezione Canali, oppure via CLI `meshtastic --info`). Nota:
-   il canale primario ha nome vuoto per i preset di default — se vuoi
-   inoltrare il primario, assegnagli un nome esplicito con:
-   ```
-   meshtastic --ch-index 0 --ch-set name "Primary" --ch-set psk random
-   ```
-   (attenzione: cambiare la PSK del canale primario rompe la compatibilità
-   con gli altri nodi che non la aggiornano — se vuoi solo il nome puoi
-   lasciare la PSK invariata specificando solo `--ch-set name "..."`).
+3. Scegli il canale Meshtastic da inoltrare, in uno dei due modi:
+   - **Canale già esistente**: verifica il nome dall'app Meshtastic
+     (sezione Canali) o via CLI `meshtastic --info`, e mettilo in
+     `MESHTASTIC_CHANNEL_NAME` (lascia vuota `MESHTASTIC_CHANNEL_PSK`).
+     Nota: il canale primario ha nome vuoto per i preset di default — se
+     vuoi inoltrare il primario, assegnagli un nome esplicito con
+     `meshtastic --ch-index 0 --ch-set name "Primary"` (senza toccare la
+     PSK, altrimenti rompi la compatibilità con gli altri nodi che non la
+     aggiornano).
+   - **Canale nuovo (provisioning automatico)**: imposta sia
+     `MESHTASTIC_CHANNEL_NAME` che `MESHTASTIC_CHANNEL_PSK` in `.env`. Al
+     primo avvio, se il canale non esiste, il bot lo crea da solo sul
+     primo slot secondario libero del nodo con quel nome e quella chiave
+     (equivalente a `meshtastic --ch-add <nome> --ch-set psk <chiave>`).
+     Dovrai poi condividere nome e chiave con gli altri nodi che devono
+     partecipare al canale (es. tramite l'URL/QR del canale generato
+     dall'app Meshtastic).
 4. Copia `.env.example` in `.env` e compila i valori:
    ```
    cp .env.example .env
@@ -73,5 +82,9 @@ non si trova in `~/lora-bot`, aggiorna anche `WorkingDirectory` ed
   l'autorilevamento fallisce: imposta `MESHTASTIC_PORT` in `.env` (es.
   `/dev/ttyUSB0`) per forzare una porta specifica.
 - Se il nome canale in `.env` non corrisponde a nessun canale configurato
-  sul nodo, il bot lo segnala nei log, elenca i canali disponibili e ricade
-  sul canale 0 (Primary) per non restare inattivo.
+  sul nodo e `MESHTASTIC_CHANNEL_PSK` non è impostata, il bot lo segnala
+  nei log, elenca i canali disponibili e ricade sul canale 0 (Primary) per
+  non restare inattivo.
+- Il provisioning automatico usa il primo canale "disabilitato" trovato
+  sul nodo (max 8 canali totali, indice 0 riservato al Primary): se sono
+  già tutti in uso il bot si ferma con un errore esplicito all'avvio.

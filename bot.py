@@ -8,7 +8,9 @@ import sys
 
 import meshtastic
 import meshtastic.serial_interface
+import meshtastic.util
 from dotenv import load_dotenv
+from meshtastic.protobuf import channel_pb2
 from pubsub import pub
 from telegram import Bot
 
@@ -23,6 +25,7 @@ log = logging.getLogger("lora-bot")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 MESHTASTIC_CHANNEL_NAME = os.environ.get("MESHTASTIC_CHANNEL_NAME")
+MESHTASTIC_CHANNEL_PSK = os.environ.get("MESHTASTIC_CHANNEL_PSK") or None
 MESHTASTIC_PORT = os.environ.get("MESHTASTIC_PORT") or None
 
 if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
@@ -33,25 +36,64 @@ if not MESHTASTIC_CHANNEL_NAME:
     sys.exit(1)
 
 
-def resolve_channel_index(interface: "meshtastic.serial_interface.SerialInterface", name: str) -> int:
-    """Trova l'indice del canale il cui nome corrisponde a `name`
-    (case-insensitive). Se non lo trova, avvisa e ricade sul canale 0
-    (Primary)."""
+def find_channel_by_name(interface: "meshtastic.serial_interface.SerialInterface", name: str):
     channels = interface.localNode.channels or []
     for ch in channels:
         ch_name = getattr(ch.settings, "name", "") or ""
         if ch_name.strip().lower() == name.strip().lower():
-            log.info("Canale '%s' trovato all'indice %d", name, ch.index)
-            return ch.index
+            return ch
+    return None
 
+
+def provision_channel(
+    interface: "meshtastic.serial_interface.SerialInterface", name: str, psk: str
+) -> int:
+    """Crea (sul primo slot libero) un canale secondario con il nome e la
+    chiave indicati e lo scrive sul dispositivo. Restituisce l'indice del
+    canale creato."""
+    node = interface.localNode
+    ch = node.getDisabledChannel()
+    if ch is None:
+        raise RuntimeError(
+            f"Nessuno slot canale libero sul nodo per provisionare '{name}' "
+            "(tutti e 8 i canali sono già in uso)."
+        )
+
+    settings = channel_pb2.ChannelSettings()
+    settings.psk = meshtastic.util.fromPSK(psk)
+    settings.name = name
+    ch.settings.CopyFrom(settings)
+    ch.role = channel_pb2.Channel.Role.SECONDARY
+
+    log.info("Provisioning canale '%s' sull'indice %d...", name, ch.index)
+    node.writeChannel(ch.index)
+    log.info("Canale '%s' scritto sul dispositivo (indice %d).", name, ch.index)
+    return ch.index
+
+
+def resolve_channel_index(interface: "meshtastic.serial_interface.SerialInterface", name: str) -> int:
+    """Trova l'indice del canale il cui nome corrisponde a `name`
+    (case-insensitive). Se non lo trova e MESHTASTIC_CHANNEL_PSK è
+    configurata, lo crea (provisioning); altrimenti avvisa e ricade sul
+    canale 0 (Primary)."""
+    ch = find_channel_by_name(interface, name)
+    if ch is not None:
+        log.info("Canale '%s' trovato all'indice %d", name, ch.index)
+        return ch.index
+
+    if MESHTASTIC_CHANNEL_PSK:
+        return provision_channel(interface, name, MESHTASTIC_CHANNEL_PSK)
+
+    channels = interface.localNode.channels or []
     available = [
-        (ch.index, getattr(ch.settings, "name", "") or "(senza nome)")
-        for ch in channels
-        if ch.role != 0  # 0 = DISABLED
+        (c.index, getattr(c.settings, "name", "") or "(senza nome)")
+        for c in channels
+        if c.role != channel_pb2.Channel.Role.DISABLED
     ]
     log.warning(
         "Canale '%s' non trovato. Canali disponibili sul nodo: %s. "
-        "Ricado sul canale 0 (Primary) — inoltrerò tutto ciò che arriva lì.",
+        "Imposta MESHTASTIC_CHANNEL_PSK per crearlo automaticamente, oppure "
+        "ricado sul canale 0 (Primary) — inoltrerò tutto ciò che arriva lì.",
         name,
         available,
     )
