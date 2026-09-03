@@ -1,0 +1,19 @@
+[Unit]
+Description=Meshtastic -> Telegram bridge bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Utente sotto cui gira il bot (deve avere accesso al device seriale,
+# es. essere nel gruppo "dialout").
+User=CHANGE_ME
+# %h si espande alla home dell'utente sopra: se il progetto sta altrove
+# sostituisci WorkingDirectory ed ExecStart con il percorso assoluto reale.
+WorkingDirectory=%h/lora-bot
+ExecStart=%h/lora-bot/.venv/bin/python %h/lora-bot/bot.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
