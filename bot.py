@@ -41,6 +41,11 @@ MESHTASTIC_BANNED_IDS = {
     for node_id in (os.environ.get("MESHTASTIC_BANNED_IDS") or "").split(",")
     if node_id.strip()
 }
+MESHTASTIC_ALLOWED_IDS = {
+    node_id.strip().lower()
+    for node_id in (os.environ.get("MESHTASTIC_ALLOWED_IDS") or "").split(",")
+    if node_id.strip()
+}
 
 if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
     log.error("TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID sono obbligatori (vedi .env).")
@@ -201,6 +206,9 @@ class Bridge:
         from_id = packet.get("fromId", "")
         if from_id.lower() in MESHTASTIC_BANNED_IDS:
             log.info("Messaggio da nodo bannato (%s) ignorato.", from_id)
+            return
+        if MESHTASTIC_ALLOWED_IDS and from_id.lower() not in MESHTASTIC_ALLOWED_IDS:
+            log.info("Messaggio da nodo non in whitelist (%s) ignorato.", from_id)
             return
 
         message = format_message(packet, interface)
