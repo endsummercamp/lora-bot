@@ -100,7 +100,8 @@ non si trova in `~/lora-bot`, aggiorna anche `WorkingDirectory` ed
 - Per bloccare l'inoltro dei messaggi di nodi specifici (es. spam o nodi
   non fidati), imposta `MESHTASTIC_BANNED_IDS` in `.env` con gli ID nodo
   (formato `!xxxxxxxx`, come mostrato nell'app Meshtastic), separati da
-  virgola.
+  virgola. Sono supportate le wildcard `*` e `?`.
 - Per inoltrare solo i messaggi di determinati nodi (whitelist), imposta
-  `MESHTASTIC_ALLOWED_IDS` in `.env` con lo stesso formato: se valorizzata,
-  tutti i nodi non elencati vengono ignorati.
+  `MESHTASTIC_ALLOWED_IDS` in `.env` con lo stesso formato (wildcard
+  incluse): se valorizzata, tutti i nodi che non corrispondono a nessun
+  pattern in elenco vengono ignorati.
