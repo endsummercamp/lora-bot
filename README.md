@@ -97,3 +97,7 @@ non si trova in `~/lora-bot`, aggiorna anche `WorkingDirectory` ed
 - Il provisioning automatico usa il primo canale "disabilitato" trovato
   sul nodo (max 8 canali totali, indice 0 riservato al Primary): se sono
   già tutti in uso il bot si ferma con un errore esplicito all'avvio.
+- Per bloccare l'inoltro dei messaggi di nodi specifici (es. spam o nodi
+  non fidati), imposta `MESHTASTIC_BANNED_IDS` in `.env` con gli ID nodo
+  (formato `!xxxxxxxx`, come mostrato nell'app Meshtastic), separati da
+  virgola.

@@ -36,6 +36,11 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 MESHTASTIC_CHANNEL_NAME = os.environ.get("MESHTASTIC_CHANNEL_NAME")
 MESHTASTIC_CHANNEL_PSK = os.environ.get("MESHTASTIC_CHANNEL_PSK") or None
 MESHTASTIC_PORT = os.environ.get("MESHTASTIC_PORT") or None
+MESHTASTIC_BANNED_IDS = {
+    node_id.strip().lower()
+    for node_id in (os.environ.get("MESHTASTIC_BANNED_IDS") or "").split(",")
+    if node_id.strip()
+}
 
 if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
     log.error("TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID sono obbligatori (vedi .env).")
@@ -191,6 +196,11 @@ class Bridge:
     def on_receive_text(self, packet, interface):
         packet_channel = packet.get("channel", 0)
         if packet_channel != self.channel_index:
+            return
+
+        from_id = packet.get("fromId", "")
+        if from_id.lower() in MESHTASTIC_BANNED_IDS:
+            log.info("Messaggio da nodo bannato (%s) ignorato.", from_id)
             return
 
         message = format_message(packet, interface)
