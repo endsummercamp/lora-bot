@@ -203,7 +203,7 @@ class Bridge:
         if packet_channel != self.channel_index:
             return
 
-        from_id = packet.get("fromId", "")
+        from_id = packet.get("fromId") or ""
         if from_id.lower() in MESHTASTIC_BANNED_IDS:
             log.info("Messaggio da nodo bannato (%s) ignorato.", from_id)
             return
